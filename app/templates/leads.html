@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}My Leads - Lance CRM{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">CRM - My Leads</h1>
+        <div class="flex space-x-4">
+            <select id="filter-status" class="border border-gray-300 rounded-md p-2">
+                <option value="">All Status</option>
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="closed">Closed</option>
+            </select>
+            <select id="filter-score" class="border border-gray-300 rounded-md p-2">
+                <option value="">All Scores</option>
+                <option value="5">High (5+)</option>
+                <option value="3">Medium (3+)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Added On</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="leads-body" class="bg-white divide-y divide-gray-200">
+                <!-- Leads will be injected here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const leadsBody = document.getElementById('leads-body');
+    const filterStatus = document.getElementById('filter-status');
+    const filterScore = document.getElementById('filter-score');
+
+    async function fetchLeads() {
+        const status = filterStatus.value;
+        const minScore = filterScore.value;
+        let url = '/api/leads/';
+        const params = [];
+        if (status) params.push(`status=${status}`);
+        if (minScore) params.push(`min_score=${minScore}`);
+        if (params.length > 0) url += '?' + params.join('&');
+
+        try {
+            const response = await fetch(url);
+            const leads = await response.json();
+            
+            leadsBody.innerHTML = '';
+            leads.forEach(lead => {
+                const tr = document.createElement('tr');
+                
+                let scoreColor = 'bg-gray-100 text-gray-800';
+                if (lead.score >= 5) scoreColor = 'bg-green-100 text-green-800';
+                else if (lead.score >= 3) scoreColor = 'bg-yellow-100 text-yellow-800';
+
+                let statusColor = 'bg-blue-100 text-blue-800';
+                if (lead.status === 'contacted') statusColor = 'bg-purple-100 text-purple-800';
+                if (lead.status === 'closed') statusColor = 'bg-green-100 text-green-800';
+
+                const date = new Date(lead.created_at).toLocaleDateString();
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${lead.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${scoreColor}">
+                            ${lead.score}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
+                            ${lead.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <a href="/leads/${lead.id}" class="text-blue-600 hover:text-blue-900 mr-4">Details</a>
+                        <button onclick="deleteLead(${lead.id})" class="text-red-600 hover:text-red-900">Delete</button>
+                    </td>
+                `;
+                leadsBody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error('Error fetching leads:', error);
+        }
+    }
+
+    async function deleteLead(id) {
+        if (!confirm('Are you sure you want to delete this lead?')) return;
+        try {
+            const response = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
+            if (response.ok) fetchLeads();
+        } catch (error) {
+            console.error('Error deleting lead:', error);
+        }
+    }
+
+    filterStatus.addEventListener('change', fetchLeads);
+    filterScore.addEventListener('change', fetchLeads);
+    document.addEventListener('DOMContentLoaded', fetchLeads);
+</script>
+{% endblock %}

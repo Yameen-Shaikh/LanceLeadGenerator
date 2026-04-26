@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Lead Details - Lance CRM{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="mb-6">
+        <a href="/leads" class="text-blue-600 hover:text-blue-800"><i class="fas fa-arrow-left mr-1"></i> Back to My Leads</a>
+    </div>
+
+    <div id="lead-container" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Left: Basic Info -->
+        <div class="md:col-span-2 space-y-6">
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
+                    <h2 id="lead-name" class="text-2xl font-bold text-gray-900">Business Name</h2>
+                    <span id="lead-score-tag" class="px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">Score: 0</span>
+                </div>
+                <div class="px-6 py-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Phone</p>
+                            <p id="lead-phone" class="mt-1 text-lg text-gray-900 font-semibold">N/A</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Website</p>
+                            <p id="lead-website" class="mt-1 text-lg text-blue-600 hover:underline">N/A</p>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <p class="text-sm font-medium text-gray-500">Address</p>
+                            <p id="lead-address" class="mt-1 text-gray-900">N/A</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WhatsApp Message Generator -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4"><i class="fab fa-whatsapp text-green-500 mr-2"></i> WhatsApp Outreach</h3>
+                <div class="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
+                    <p id="whatsapp-message" class="text-gray-700 italic">"Hi [Business], I noticed your business and wanted to help you with a website/system to grow your customers."</p>
+                </div>
+                <button onclick="copyWhatsApp()" class="bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-600">
+                    <i class="fas fa-copy mr-2"></i> Copy Message
+                </button>
+            </div>
+
+            <!-- Notes Section -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Internal Notes</h3>
+                <textarea id="lead-notes" rows="6" class="w-full border border-gray-300 rounded-md p-3 focus:ring-blue-500 focus:border-blue-500" placeholder="Add your notes here..."></textarea>
+                <div class="mt-4 flex justify-end">
+                    <button onclick="updateLead()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded hover:bg-blue-700">
+                        Save Notes & Status
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Status Control -->
+        <div class="space-y-6">
+            <div class="bg-white shadow rounded-lg p-6 text-center">
+                <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Lead Status</h3>
+                <div class="space-y-3">
+                    <button onclick="setStatus('new')" id="status-new" class="w-full py-2 px-4 rounded-md border-2 border-transparent bg-gray-100 hover:bg-gray-200 font-semibold">New</button>
+                    <button onclick="setStatus('contacted')" id="status-contacted" class="w-full py-2 px-4 rounded-md border-2 border-transparent bg-gray-100 hover:bg-gray-200 font-semibold">Contacted</button>
+                    <button onclick="setStatus('closed')" id="status-closed" class="w-full py-2 px-4 rounded-md border-2 border-transparent bg-gray-100 hover:bg-gray-200 font-semibold">Closed / Converted</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const leadId = {{ lead_id }};
+    let currentStatus = 'new';
+
+    async function fetchLead() {
+        try {
+            const response = await fetch(`/api/leads/${leadId}`);
+            const lead = await response.json();
+            
+            document.getElementById('lead-name').textContent = lead.name;
+            document.getElementById('lead-phone').textContent = lead.phone || 'N/A';
+            document.getElementById('lead-address').textContent = lead.address || 'N/A';
+            document.getElementById('lead-score-tag').textContent = `Score: ${lead.score}`;
+            document.getElementById('lead-notes').value = lead.notes || '';
+            
+            if (lead.website) {
+                const webLink = document.getElementById('lead-website');
+                webLink.innerHTML = `<a href="${lead.website}" target="_blank" class="hover:underline">${lead.website}</a>`;
+            }
+
+            // Set status UI
+            setStatus(lead.status, false);
+
+            // Generate WhatsApp message
+            const message = `Hi ${lead.name}, I noticed your business and wanted to help you with a website/system to grow your customers.`;
+            document.getElementById('whatsapp-message').textContent = `"${message}"`;
+
+            document.getElementById('lead-container').classList.remove('hidden');
+        } catch (error) {
+            console.error('Error fetching lead details:', error);
+            alert('Lead not found.');
+        }
+    }
+
+    function setStatus(status, update=true) {
+        currentStatus = status;
+        
+        // Reset all buttons
+        ['new', 'contacted', 'closed'].forEach(s => {
+            const btn = document.getElementById(`status-${s}`);
+            btn.classList.remove('border-blue-500', 'bg-blue-100');
+            btn.classList.add('bg-gray-100');
+        });
+
+        // Highlight selected
+        const activeBtn = document.getElementById(`status-${status}`);
+        activeBtn.classList.remove('bg-gray-100');
+        activeBtn.classList.add('border-blue-500', 'bg-blue-100');
+
+        if (update) {
+            // We'll save when the big "Save" button is clicked
+        }
+    }
+
+    async function updateLead() {
+        const notes = document.getElementById('lead-notes').value;
+        try {
+            const response = await fetch(`/api/leads/${leadId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: currentStatus,
+                    notes: notes
+                })
+            });
+            if (response.ok) {
+                alert('Lead updated successfully!');
+            }
+        } catch (error) {
+            console.error('Error updating lead:', error);
+        }
+    }
+
+    function copyWhatsApp() {
+        const message = document.getElementById('whatsapp-message').textContent.replace(/"/g, '');
+        navigator.clipboard.writeText(message).then(() => {
+            alert('Message copied to clipboard!');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', fetchLead);
+</script>
+{% endblock %}

@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Search Leads - Lance CRM{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Search New Leads</h1>
+        <p class="text-gray-600">Enter a keyword (e.g., gym, salon) and a city to find local businesses via OpenStreetMap.</p>
+    </div>
+
+    <!-- Search Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <form id="search-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Keyword</label>
+                <input type="text" id="keyword" placeholder="e.g. restaurant" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">City</label>
+                <input type="text" id="city" placeholder="e.g. Pune" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" required>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" id="search-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <i class="fas fa-search mr-2"></i> Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="hidden text-center py-10">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <p class="mt-2 text-gray-600">Fetching data from Overpass API... this may take a moment.</p>
+    </div>
+
+    <!-- Results Table -->
+    <div id="results-container" class="hidden">
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Business Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Results will be injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="no-results" class="hidden text-center py-10 text-gray-500">
+        <p>No results found. Try a different keyword or city.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const searchForm = document.getElementById('search-form');
+    const searchBtn = document.getElementById('search-btn');
+    const loading = document.getElementById('loading');
+    const resultsContainer = document.getElementById('results-container');
+    const resultsBody = document.getElementById('results-body');
+    const noResults = document.getElementById('no-results');
+
+    searchForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const keyword = document.getElementById('keyword').value;
+        const city = document.getElementById('city').value;
+
+        // Reset UI
+        loading.classList.remove('hidden');
+        resultsContainer.classList.add('hidden');
+        noResults.classList.add('hidden');
+        resultsBody.innerHTML = '';
+        searchBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/leads/search?keyword=${keyword}&city=${city}`);
+            const data = await response.json();
+
+            loading.classList.add('hidden');
+            searchBtn.disabled = false;
+
+            if (data.length === 0) {
+                noResults.classList.remove('hidden');
+                return;
+            }
+
+            resultsContainer.classList.remove('hidden');
+            data.forEach(lead => {
+                const tr = document.createElement('tr');
+                
+                // Determine score color
+                let scoreColor = 'bg-gray-100 text-gray-800';
+                if (lead.score >= 5) scoreColor = 'bg-green-100 text-green-800';
+                else if (lead.score >= 3) scoreColor = 'bg-yellow-100 text-yellow-800';
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">${lead.name}</div>
+                        <div class="text-sm text-gray-500">${lead.address || 'No address'}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${lead.phone || '<span class="italic">N/A</span>'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${lead.website ? `<a href="${lead.website}" target="_blank" class="text-blue-600 hover:underline">Link</a>` : '<span class="italic">No website</span>'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${scoreColor}">
+                            ${lead.score}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick='saveLead(${JSON.stringify(lead).replace(/'/g, "&apos;")})' class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded">Save to CRM</button>
+                    </td>
+                `;
+                resultsBody.appendChild(tr);
+            });
+
+        } catch (error) {
+            console.error('Error searching leads:', error);
+            loading.classList.add('hidden');
+            searchBtn.disabled = false;
+            alert('An error occurred while searching. Please try again.');
+        }
+    });
+
+    async function saveLead(leadData) {
+        try {
+            const response = await fetch('/api/leads/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: leadData.name,
+                    phone: leadData.phone,
+                    website: leadData.website,
+                    address: leadData.address,
+                    score: leadData.score
+                })
+            });
+            
+            if (response.ok) {
+                alert('Lead saved successfully!');
+            } else {
+                alert('Failed to save lead.');
+            }
+        } catch (error) {
+            console.error('Error saving lead:', error);
+            alert('Error saving lead.');
+        }
+    }
+</script>
+{% endblock %}
