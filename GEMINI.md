@@ -23,17 +23,18 @@ A tool for freelancers to find local businesses using OpenStreetMap (Overpass AP
 ## Roadmap
 - [x] Initial Project Setup
 - [x] Database Schema & Models
-- [x] OSM (Overpass API) Service Implementation (Enhanced with flexible filtering & retry logic)
-- [x] Lead Scoring Logic
+- [x] OSM (Overpass API) Service Implementation (Enhanced with Geocoding & Radius Search)
+- [x] Resilient API logic (User-Agent rotation to bypass 406 errors)
+- [x] Lead Scoring Logic (Prioritizing businesses without websites)
 - [x] Backend API Implementation
-- [x] Frontend UI (Dashboard, Search, List, Detail)
+- [x] Frontend UI (Responsive tables with horizontal scroll)
 - [x] WhatsApp Message Generator
 - [x] Final Testing & Documentation
 
 ## Current Status
 - Project is complete and highly functional.
-- OSM Search: Improved reliability using broad area fetching, Python-level keyword filtering, and fallback category mapping (e.g., matching "gym" to "fitness_centre").
-- Robustness: Added retry logic and User-Agent headers to handle Overpass API limitations and 406 errors.
-- CRM features (Save, Update, Delete) working.
-- WhatsApp Outreach integration added.
-- Setup instructions provided in README.md.
+- **Search System:** Replaced broad area fetching with a high-reliability Geocoding + 10km Radius Search. Any location (suburbs, cities, states) can now be searched.
+- **Robustness:** Implemented a resilient request handler with User-Agent rotation to handle Overpass API "406 Not Acceptable" errors and rate limiting.
+- **UI Improvements:** Enhanced the results tables with dedicated columns for Address, Contact, and Website, including horizontal scrolling for mobile responsiveness.
+- **CRM Features:** Full Save, Update, and Delete functionality for leads is working.
+- **WhatsApp Outreach:** Integrated outreach generator is functional.

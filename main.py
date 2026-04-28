@@ -27,11 +27,12 @@ async def search_page(request: Request):
 
 @app.get("/leads")
 async def leads_page(request: Request):
-    return templates.TemplateResponse(request=request, name="leads.html")
+    data = templates.TemplateResponse(request=request, name="leads.html")
+    return data
 
 @app.get("/leads/{lead_id}")
 async def lead_detail_page(request: Request, lead_id: int):
     return templates.TemplateResponse(request=request, name="lead_detail.html", context={"lead_id": lead_id})
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="localhost", reload=True)

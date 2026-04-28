@@ -9,13 +9,16 @@ from app.services.osm_service import OSMService, calculate_score
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 @router.get("/search")
-def search_leads(keyword: str, city: str):
-    osm_leads = OSMService.search_leads(keyword, city)
+def search_leads(keyword: str, location: str):
+    osm_leads = OSMService.search_leads(keyword, location)
     scored_leads = []
+    
     for lead in osm_leads:
         score = calculate_score(lead)
         lead['score'] = score
         scored_leads.append(lead)
+        
+    print(f"DEBUG: Returning {len(scored_leads)} leads to frontend")
     return scored_leads
 
 @router.post("/", response_model=schemas.Lead)
