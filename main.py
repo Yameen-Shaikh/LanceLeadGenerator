@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from app.database.database import engine, Base
 from app.routers import leads
 import uvicorn
+import os
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -35,4 +36,6 @@ async def lead_detail_page(request: Request, lead_id: int):
     return templates.TemplateResponse(request=request, name="lead_detail.html", context={"lead_id": lead_id})
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="localhost", reload=True)
+    port = int(os.getenv("PORT", 8000))
+    # Bind to 0.0.0.0 for Render, set reload=False for production stability
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
