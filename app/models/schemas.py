@@ -8,6 +8,7 @@ class LeadBase(BaseModel):
     website: Optional[str] = None
     address: Optional[str] = None
     score: int = 0
+    link_status: Optional[str] = None
     status: str = "new"
     notes: Optional[str] = None
 

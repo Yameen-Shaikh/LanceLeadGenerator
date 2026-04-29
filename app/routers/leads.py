@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from app.database.database import get_db
@@ -8,8 +8,31 @@ from app.services.osm_service import OSMService, calculate_score
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
+def enrich_lead_in_background(lead_id: int, db: Session):
+    db_lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not db_lead:
+        return
+    
+    # Perform enrichment
+    if db_lead.website:
+        db_lead.link_status = OSMService.check_link_status(db_lead.website)
+    else:
+        db_lead.link_status = "missing"
+    
+    # Recalculate score based on new info
+    lead_dict = {
+        "website": db_lead.website,
+        "link_status": db_lead.link_status,
+        "phone": db_lead.phone,
+        "address": db_lead.address
+    }
+    db_lead.score = calculate_score(lead_dict)
+    
+    db.commit()
+
 @router.get("/search")
 def search_leads(keyword: str, location: str):
+
     osm_leads = OSMService.search_leads(keyword, location)
     scored_leads = []
     
@@ -18,15 +41,18 @@ def search_leads(keyword: str, location: str):
         lead['score'] = score
         scored_leads.append(lead)
         
-    print(f"DEBUG: Returning {len(scored_leads)} leads to frontend")
     return scored_leads
 
 @router.post("/", response_model=schemas.Lead)
-def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
+def create_lead(lead: schemas.LeadCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     db_lead = models.Lead(**lead.model_dump())
     db.add(db_lead)
     db.commit()
     db.refresh(db_lead)
+    
+    # Trigger background enrichment to ensure data is freshest when saved
+    background_tasks.add_task(enrich_lead_in_background, db_lead.id, db)
+    
     return db_lead
 
 @router.get("/", response_model=List[schemas.Lead])

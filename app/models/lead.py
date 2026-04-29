@@ -11,6 +11,7 @@ class Lead(Base):
     website = Column(String, nullable=True)
     address = Column(String, nullable=True)
     score = Column(Integer, default=0)
+    link_status = Column(String, nullable=True) # live, dead, missing
     status = Column(String, default="new") # new, contacted, closed
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
