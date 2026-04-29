@@ -132,6 +132,7 @@ class OSMService:
           nwr(around:{radius}, {lat}, {lon})["leisure"~"{search_terms}", i];
           nwr(around:{radius}, {lat}, {lon})["amenity"~"{search_terms}", i];
           nwr(around:{radius}, {lat}, {lon})["shop"~"{search_terms}", i];
+          nwr(around:{radius}, {lat}, {lon})["office"~"{search_terms}", i];
           nwr(around:{radius}, {lat}, {lon})["name"~"{keyword_clean}", i];
         );
         out tags center;
@@ -146,7 +147,7 @@ class OSMService:
         ]
 
         headers = {
-            "User-Agent": f"LanceLeadGenTool/2.1 (Contact: lance-project-dev@gmail.com)",
+            "User-Agent": f"LanceLeadGenTool/2.2 (Contact: lance-project-dev@gmail.com)",
             "Accept": "application/json",
             "Referer": "https://osm.org/"
         }
@@ -174,7 +175,8 @@ class OSMService:
                         place_type = tags.get('place') or tags.get('boundary') or tags.get('landuse')
                         if place_type in blacklisted_place_types: continue
                         
-                        has_biz_tag = any(t in tags for t in ['amenity', 'shop', 'leisure', 'office', 'craft', 'healthcare', 'tourism'])
+                        # More inclusive business check
+                        has_biz_tag = any(t in tags for t in ['amenity', 'shop', 'leisure', 'office', 'craft', 'healthcare', 'tourism', 'industrial'])
                         if not has_biz_tag and keyword_clean not in name.lower(): continue
 
                         seen_names.add(name_key)
@@ -194,7 +196,7 @@ class OSMService:
                             "lon": lon_val,
                             "osm_id": element.get('id')
                         })
-                        if len(leads) >= 40: break
+                        if len(leads) >= 50: break
 
                     if not leads: continue
 

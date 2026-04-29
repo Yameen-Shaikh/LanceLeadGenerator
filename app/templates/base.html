@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100 min-h-screen flex flex-col">
     <nav class="bg-blue-600 text-white shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
@@ -25,11 +25,11 @@
         </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 flex-grow">
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-white border-t mt-10 py-6">
+    <footer class="bg-white border-t py-8 mt-auto">
         <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
             &copy; 2026 Lance CRM - Freelancer Lead Tool
         </div>

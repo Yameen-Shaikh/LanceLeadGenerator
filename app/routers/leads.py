@@ -5,6 +5,7 @@ from app.database.database import get_db
 from app.models import lead as models
 from app.models import schemas
 from app.services.osm_service import OSMService, calculate_score
+from app.services.scraper_service import ScraperService
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -13,13 +14,22 @@ def enrich_lead_in_background(lead_id: int, db: Session):
     if not db_lead:
         return
     
-    # Perform enrichment
+    # 1. Validate Link Status
     if db_lead.website:
         db_lead.link_status = OSMService.check_link_status(db_lead.website)
+        
+        # 2. Extract Mobile Number if missing or if it's a landline (starts with 020)
+        current_phone = db_lead.phone or ""
+        is_pune_landline = current_phone.startswith('020') or current_phone.startswith('+9120')
+        
+        if not current_phone or is_pune_landline:
+            scraped_phone = ScraperService.extract_mobile_numbers(db_lead.website)
+            if scraped_phone:
+                db_lead.phone = scraped_phone
     else:
         db_lead.link_status = "missing"
     
-    # Recalculate score based on new info
+    # 3. Recalculate score based on new info
     lead_dict = {
         "website": db_lead.website,
         "link_status": db_lead.link_status,
@@ -50,7 +60,9 @@ def create_lead(lead: schemas.LeadCreate, background_tasks: BackgroundTasks, db:
     db.commit()
     db.refresh(db_lead)
     
-    # Trigger background enrichment to ensure data is freshest when saved
+    print(f"DEBUG: Created Lead ID {db_lead.id} for {db_lead.name}")
+    
+    # Trigger background enrichment
     background_tasks.add_task(enrich_lead_in_background, db_lead.id, db)
     
     return db_lead
@@ -62,7 +74,10 @@ def read_leads(status: str = None, min_score: int = None, db: Session = Depends(
         query = query.filter(models.Lead.status == status)
     if min_score is not None:
         query = query.filter(models.Lead.score >= min_score)
-    return query.all()
+    
+    leads = query.order_by(models.Lead.created_at.desc()).all()
+    print(f"DEBUG: Returning {len(leads)} leads from DB")
+    return leads
 
 @router.get("/{lead_id}", response_model=schemas.Lead)
 def read_lead(lead_id: int, db: Session = Depends(get_db)):
