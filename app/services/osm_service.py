@@ -1,6 +1,6 @@
-import requests
+import httpx
 import logging
-import time
+import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 
@@ -32,7 +32,7 @@ class OSMService:
     }
 
     @staticmethod
-    def get_coords(location: str):
+    async def get_coords(location: str):
         """Fetch coordinates with caching and multiple fallbacks (Photon + Nominatim)."""
         location_clean = location.strip().lower()
         
@@ -41,83 +41,86 @@ class OSMService:
 
         unique_ua = f"LanceLeadGenApp/1.0 (Contact: lance-app-{random.randint(100,999)}@example.com)"
 
-        def try_services(loc):
-            # Try Photon (Komoot)
-            photon_url = f"https://photon.komoot.io/api/?q={loc}&limit=1"
-            try:
-                response = requests.get(photon_url, headers={"User-Agent": unique_ua}, timeout=15)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('features'):
-                        coords = data['features'][0]['geometry']['coordinates']
-                        return coords[1], coords[0] # [lat, lon]
-            except:
-                pass
-
-            # Try Nominatim Mirrors
-            endpoints = [
-                "https://nominatim.openstreetmap.org/search",
-                "https://nominatim.qwant.com/search",
-            ]
-            for url in endpoints:
+        async def try_services(loc):
+            async with httpx.AsyncClient(headers={"User-Agent": unique_ua}, timeout=15.0) as client:
+                # Try Photon (Komoot)
+                photon_url = f"https://photon.komoot.io/api/?q={loc}&limit=1"
                 try:
-                    params = {"q": loc, "format": "json", "limit": 1}
-                    response = requests.get(url, params=params, headers={"User-Agent": unique_ua}, timeout=15)
+                    response = await client.get(photon_url)
                     if response.status_code == 200:
                         data = response.json()
-                        if data:
-                            return data[0]["lat"], data[0]["lon"]
+                        if data.get('features'):
+                            coords = data['features'][0]['geometry']['coordinates']
+                            return coords[1], coords[0] # [lat, lon]
                 except:
-                    continue
+                    pass
+
+                # Try Nominatim Mirrors
+                endpoints = [
+                    "https://nominatim.openstreetmap.org/search",
+                    "https://nominatim.qwant.com/search",
+                ]
+                for url in endpoints:
+                    try:
+                        params = {"q": loc, "format": "json", "limit": 1}
+                        response = await client.get(url, params=params)
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data:
+                                return data[0]["lat"], data[0]["lon"]
+                    except:
+                        continue
             return None, None
 
-        res = try_services(location_clean)
-        if not res and " " not in location_clean and "," not in location_clean:
-            res = try_services(f"{location_clean}, India")
+        res = await try_services(location_clean)
+        if not res[0] and " " not in location_clean and "," not in location_clean:
+            res = await try_services(f"{location_clean}, India")
 
-        if res:
+        if res[0]:
             OSMService.COORD_CACHE[location_clean] = res
             
         return res
 
     @staticmethod
-    def get_exact_address(lat, lon):
+    async def get_exact_address(lat, lon):
         """Reverse geocoding with UA rotation."""
         params = {"lat": lat, "lon": lon, "format": "json", "addressdetails": 1}
         ua = random.choice(OSMService.USER_AGENTS)
-        try:
-            response = requests.get(OSMService.REVERSE_GEOCODE_URL, params=params, headers={"User-Agent": ua}, timeout=5)
-            data = response.json()
-            if data and "display_name" in data:
-                return ", ".join(data.get("display_name").split(",")[:4])
-        except:
-            pass
+        async with httpx.AsyncClient(headers={"User-Agent": ua}, timeout=5.0) as client:
+            try:
+                response = await client.get(OSMService.REVERSE_GEOCODE_URL, params=params)
+                data = response.json()
+                if data and "display_name" in data:
+                    return ", ".join(data.get("display_name").split(",")[:4])
+            except:
+                pass
         return None
 
     @staticmethod
-    def check_link_status(url: str):
+    async def check_link_status(url: str):
         """Check link reachability."""
         if not url: return None
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         ua = random.choice(OSMService.USER_AGENTS)
-        try:
-            response = requests.head(url, headers={"User-Agent": ua}, timeout=5, allow_redirects=True)
-            return "live" if response.status_code < 400 else "dead"
-        except:
+        async with httpx.AsyncClient(headers={"User-Agent": ua}, timeout=5.0, follow_redirects=True) as client:
             try:
-                response = requests.get(url, headers={"User-Agent": ua}, timeout=5, allow_redirects=True)
+                response = await client.head(url)
                 return "live" if response.status_code < 400 else "dead"
             except:
-                return "dead"
+                try:
+                    response = await client.get(url)
+                    return "live" if response.status_code < 400 else "dead"
+                except:
+                    return "dead"
 
     @staticmethod
-    def search_leads(keyword: str, location: str):
+    async def search_leads(keyword: str, location: str):
         """Main search logic with robust filtering and case-insensitivity."""
         keyword_clean = keyword.strip().lower()
         location_clean = location.strip().lower()
         
-        lat, lon = OSMService.get_coords(location_clean)
+        lat, lon = await OSMService.get_coords(location_clean)
         if not lat or not lon:
             return []
             
@@ -154,68 +157,69 @@ class OSMService:
 
         blacklisted_place_types = ["suburb", "neighbourhood", "residential", "postcode", "district", "village", "town", "locality"]
 
-        for url in overpass_endpoints:
-            try:
-                response = requests.post(url, data={'data': query}, headers=headers, timeout=120)
-                if response.status_code == 200:
-                    data = response.json()
-                    elements = data.get('elements', [])
-                    if not elements: continue
+        async with httpx.AsyncClient(headers=headers, timeout=120.0) as client:
+            for url in overpass_endpoints:
+                try:
+                    response = await client.post(url, data={'data': query})
+                    if response.status_code == 200:
+                        data = response.json()
+                        elements = data.get('elements', [])
+                        if not elements: continue
 
-                    leads = []
-                    seen_names = set()
-                    for element in elements:
-                        tags = element.get('tags', {})
-                        name = tags.get('name') or tags.get('brand')
-                        if not name: continue
-                        
-                        name_key = name.strip().lower()
-                        if name_key in seen_names: continue
-                        
-                        place_type = tags.get('place') or tags.get('boundary') or tags.get('landuse')
-                        if place_type in blacklisted_place_types: continue
-                        
-                        # More inclusive business check
-                        has_biz_tag = any(t in tags for t in ['amenity', 'shop', 'leisure', 'office', 'craft', 'healthcare', 'tourism', 'industrial'])
-                        if not has_biz_tag and keyword_clean not in name.lower(): continue
+                        leads = []
+                        seen_names = set()
+                        for element in elements:
+                            tags = element.get('tags', {})
+                            name = tags.get('name') or tags.get('brand')
+                            if not name: continue
+                            
+                            name_key = name.strip().lower()
+                            if name_key in seen_names: continue
+                            
+                            place_type = tags.get('place') or tags.get('boundary') or tags.get('landuse')
+                            if place_type in blacklisted_place_types: continue
+                            
+                            # More inclusive business check
+                            has_biz_tag = any(t in tags for t in ['amenity', 'shop', 'leisure', 'office', 'craft', 'healthcare', 'tourism', 'industrial'])
+                            if not has_biz_tag and keyword_clean not in name.lower(): continue
 
-                        seen_names.add(name_key)
-                        
-                        addr_parts = [tags.get(f'addr:{f}', '') for f in ['housenumber', 'street', 'suburb', 'city'] if tags.get(f'addr:{f}')]
-                        addr = ", ".join(addr_parts)
-                        
-                        lat_val = element.get('lat') or element.get('center', {}).get('lat')
-                        lon_val = element.get('lon') or element.get('center', {}).get('lon')
+                            seen_names.add(name_key)
+                            
+                            addr_parts = [tags.get(f'addr:{f}', '') for f in ['housenumber', 'street', 'suburb', 'city'] if tags.get(f'addr:{f}')]
+                            addr = ", ".join(addr_parts)
+                            
+                            lat_val = element.get('lat') or element.get('center', {}).get('lat')
+                            lon_val = element.get('lon') or element.get('center', {}).get('lon')
 
-                        leads.append({
-                            "name": name,
-                            "phone": tags.get('phone') or tags.get('contact:phone') or tags.get('contact:mobile'),
-                            "website": tags.get('website') or tags.get('contact:website') or tags.get('url'),
-                            "address": addr,
-                            "lat": lat_val,
-                            "lon": lon_val,
-                            "osm_id": element.get('id')
-                        })
-                        if len(leads) >= 50: break
+                            leads.append({
+                                "name": name,
+                                "phone": tags.get('phone') or tags.get('contact:phone') or tags.get('contact:mobile'),
+                                "website": tags.get('website') or tags.get('contact:website') or tags.get('url'),
+                                "address": addr,
+                                "lat": lat_val,
+                                "lon": lon_val,
+                                "osm_id": element.get('id')
+                            })
+                            if len(leads) >= 50: break
 
-                    if not leads: continue
+                        if not leads: continue
 
-                    # Enrichment
-                    def enrich_lead(lead):
-                        lead['link_status'] = OSMService.check_link_status(lead['website']) if lead['website'] else "missing"
-                        if (not lead['address'] or "near" in lead['address'].lower()) and lead['lat'] and lead['lon']:
-                            refined = OSMService.get_exact_address(lead['lat'], lead['lon'])
-                            if refined: lead['address'] = refined
-                        return lead
+                        # Enrichment
+                        async def enrich_lead(lead):
+                            lead['link_status'] = await OSMService.check_link_status(lead['website']) if lead['website'] else "missing"
+                            if (not lead['address'] or "near" in lead['address'].lower()) and lead['lat'] and lead['lon']:
+                                refined = await OSMService.get_exact_address(lead['lat'], lead['lon'])
+                                if refined: lead['address'] = refined
+                            return lead
 
-                    with ThreadPoolExecutor(max_workers=10) as executor:
-                        leads = list(executor.map(enrich_lead, leads))
+                        tasks = [enrich_lead(lead) for lead in leads]
+                        leads = await asyncio.gather(*tasks)
 
-                    return leads
-                else:
+                        return leads
+                    else:
+                        continue
+                except:
                     continue
-            except:
-                continue
         
         return []
 
