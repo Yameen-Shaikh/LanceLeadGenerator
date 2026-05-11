@@ -96,7 +96,7 @@ def create_lead(lead: schemas.LeadCreate, background_tasks: BackgroundTasks, db:
     db.commit()
     db.refresh(db_lead)
     
-    print(f"DEBUG: Created Lead ID {db_lead.id} for {db_lead.name}")
+    logging.info(f"Created Lead ID {db_lead.id} for {db_lead.name}")
     
     # Trigger background enrichment
     background_tasks.add_task(enrich_lead_in_background, db_lead.id, db)
@@ -112,7 +112,7 @@ def read_leads(status: str = None, min_score: int = None, db: Session = Depends(
         query = query.filter(models.Lead.score >= min_score)
     
     leads = query.order_by(models.Lead.created_at.desc()).all()
-    print(f"DEBUG: Returning {len(leads)} leads from DB")
+    logging.info(f"Returning {len(leads)} leads from DB")
     return leads
 
 @router.get("/{lead_id}", response_model=schemas.Lead)
